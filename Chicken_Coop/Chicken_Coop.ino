@@ -166,11 +166,15 @@ void loop() {
     //Serial.println(DoorDownSwitch);
     //Serial.print("Door 2nd Chance: "), Serial.println(Door_2nd_chance);
     //Serial.print("Coop Temp: "), Serial.println(CoopTemp);
-    ReadTimeDate();
-    Serial.println(ReadTimeDate());
-    Serial.println();
+    //Serial.println(ReadTimeDate());
+    //Serial.println();
+    ReadTimeDate();  // Get Time/Date
 
-    OutsideLight();
+    OutsideLight(); // Control Outside Porch Light
+  }
+
+    if ((TimeDate[5] >= 10) && (TimeDate[5] <= 2)) { // if the month is a winter month control "daylight" inside light
+    InsideLight ();
   }
   
   if (TimeDate[2] == OpenDoorHour && TimeDate[1] == OpenDoorMin) {
@@ -197,9 +201,6 @@ void loop() {
     SecondChanceDoorClose();
   }*/
 
-  if ((TimeDate[5] >= 10) && (TimeDate[5] <= 2)) { // if the month is a winter month
-    InsideLight();
-  }
 }
 
 /****************************************************************
