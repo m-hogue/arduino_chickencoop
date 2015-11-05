@@ -74,10 +74,10 @@ void getSunriseSunsetHTTP(String results[]) {
         // this particular web service doesn't return a Content-Length header.
         // That means that we'll need to skip to the start of the json response to start parsing, handling the length dynamically.
         // I've left the below commented out since it's really useless here, but may be in other web requests.
-//        int bodyLen = http.contentLength();
-//        Serial.print("content length: ");
-//        Serial.println(bodyLen);
-        Serial.println("Body returned:");
+        //int bodyLen = http.contentLength();
+        //Serial.print("content length: ");
+        //Serial.println(bodyLen);
+        //Serial.println("Body returned:");
 
         unsigned int timeoutStart = millis();
         char c;
@@ -100,7 +100,7 @@ void getSunriseSunsetHTTP(String results[]) {
               // we've not yet reached the json content.. Continue reading and build the body length.
               if(isdigit(c)) {
                 // leftshift digit and add c (i.e. if we had read 1 and are now reading c: 1*10 = 10 + c. If c was 3, then we'd have 13.)
-               int bodyLen = bodyLen*10 + (c - '0');
+              // bodyLen = bodyLen*10 + (c - '0');
               }
               continue;
             }

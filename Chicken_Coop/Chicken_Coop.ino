@@ -14,7 +14,6 @@
 #include <HttpClient.h>
 // ArduinoJson library from https://github.com/bblanchon/ArduinoJson
 #include <ArduinoJson.h>
-//#include <EthernetUdp.h>
 
 #define DOOR_MOVING 0
 #define DOOR_OPEN 1
@@ -103,7 +102,7 @@ int DaylightOnHour = 4; // Used for manual function of daylight light
 int DaylightOffHour = 7; // Used for manual function of daylight light
 int DaylightOnMonth = 10; // Used for manual function of daylight light
 int DaylightOffMonth = 3; // Used for manual function of daylight light
-int UpdateTime = 2; // Variable used to Update time via NTP server and apply updated time to RTC
+int UpdateTime = 16; // Variable used to Update time via NTP server and apply updated time to RTC
 boolean haveSStime; // Variable used for updating sunrise/sunset time, and current time via NTP only once per day
 int timeHour; // CST variable for Hour
 int timeMinute; // CST variable for Minute
@@ -139,14 +138,15 @@ int sunsetHour, sunsetMinute, sunsetSecond;
 // Newer Ethernet shields have a MAC address printed on a sticker on the shield
 byte mac[] = {  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 //IPAddress ip(10,10,10,198); // local IP HogHouse
-IPAddress ip(10,110,7,199); // local IP TDI
+//IPAddress ip(10,110,7,199); // local IP TDI
+IPAddress ip(192,168,0,199); // local ip JJ House
 
 // Initialize the Ethernet client library
 // with the IP address and port of the server 
 // that you want to connect to (port 80 is default for HTTP):
 EthernetClient client;
 HttpClient http(client);
-#define W5200_CS 53
+#define W5200_CS 10
 #define SDCARD_CS 4
 
 // parameters needed to fetch sunrise and sunset time RESTfully.
@@ -190,28 +190,27 @@ void setup() {
   pinMode(Exhaust_Fan_Pin, OUTPUT);
   pinMode(Outside_Light_Pin, OUTPUT);
   pinMode(Fault_LED_Pin, OUTPUT);
+  pinMode(31, OUTPUT);
   pinMode(rtcs, OUTPUT);
   //pinMode(EthchipSelect, OUTPUT);
-  pinMode(10, OUTPUT);
-  digitalWrite(10, HIGH);
-
-  //Serial.begin (115200);
+  
   //md.init(); // Initialize Motor Driver
 
    // Open serial communications and wait for port to open:
   Serial.begin(115200);
-  
-  // disable w5100 SPI while starting SD
+  // disable all SPI devices
+  pinMode(SDCARD_CS,OUTPUT);
+  digitalWrite(SDCARD_CS,HIGH);
   pinMode(W5200_CS,OUTPUT);
   digitalWrite(W5200_CS,HIGH);
-  
+
+  digitalWrite(SDCARD_CS,LOW);
   Serial.println("Starting SD...");
   if(!SD.begin(SDCARD_CS)) {
     Serial.println("failed.");
   } else {
     Serial.println("ok.");
   }
-  
   // start the Ethernet connection:
   Serial.println("Starting Ethernet...");
   Ethernet.begin(mac, ip);
@@ -284,9 +283,10 @@ void loop() {
     OutsideLight(); // Control Outside Porch Light
   }
 
-  /*if ((TimeDate[5] >= DaylightOnMonth) && (TimeDate[5] <= DaylightOffMonth)) { // if the month is a winter month control "daylight" inside light
-    InsideLight();
-  }*/
+  if ((TimeDate[5] >= DaylightOnMonth) && (TimeDate[5] <= DaylightOffMonth)) { // if the month is a winter month control "daylight" inside light
+    digitalWrite(31, HIGH);
+    //InsideLight();
+  }
 
   if (TimeDate[2] == OpenDoorHour && TimeDate[1] == OpenDoorMin) {
     OpenCoopDoor();

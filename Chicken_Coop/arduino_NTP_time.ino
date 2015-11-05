@@ -148,16 +148,6 @@ unsigned long sendNTPpacket(char* address) {
   Udp.write(packetBuffer, NTP_PACKET_SIZE);
   Udp.endPacket();
 }
-/*********************************************************************
-* Update RTC Time
-* *******************************************************************/
-/*  void Update_RTC(){
-  TimeDate[0] = timeSecond;
-  TimeDate[1] = timeMinute;
-  TimeDate[2] = timeHour;
-  Serial.println("Updated Time");
-  }
-*/
 /****************************************************************
 *Update Time on Real Time Clock
 *****************************************************************/
