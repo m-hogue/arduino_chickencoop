@@ -11,8 +11,8 @@
  author: Michael Hogue
  
  */
-
-/*#include <SPI.h>
+/*
+#include <SPI.h>
 #include <SD.h>
 // ethernet library from https://github.com/Seeed-Studio/Ethernet_Shield_W5200
 #include <EthernetV2_0.h>
@@ -32,15 +32,15 @@ int sunsetHour, sunsetMinute, sunsetSecond;
 
 // Enter a MAC address for your controller below.
 // Newer Ethernet shields have a MAC address printed on a sticker on the shield
-byte mac[] = {  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+//byte mac[] = {  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 //IPAddress ip(10,10,10,198); // local IP HogHouse
-IPAddress ip(10,110,7,199); // local IP TDI
+//IPAddress ip(10,110,7,199); // local IP TDI
 
 // Initialize the Ethernet client library
 // with the IP address and port of the server 
 // that you want to connect to (port 80 is default for HTTP):
-EthernetClient client;
-HttpClient http(client);
+//EthernetClient client;
+//HttpClient http(client);
 #define W5200_CS 53
 #define SDCARD_CS 4
 
@@ -49,13 +49,15 @@ const char sunriseSunsetServer[] = "api.sunrise-sunset.org";
 const char sunriseSunsetPath[] = "/json?lat=40.547554&lng=-89.614399&date=today";
 IPAddress sunriseSunsetIP(104,131,2,15);
 
-#define JSON_START_CHAR '{'*/
+#define JSON_START_CHAR '{'
+*/
 
 /**
  * Method to fetch sunrise and sunset time
  * 
  * The parameter results will be populated with the sunrise and sunset returned by the web service
  */
+ /*
 void getSunriseSunsetHTTP(String results[]) {
   StaticJsonBuffer<1024> jsonBuffer;
   int err = 0;
@@ -140,7 +142,7 @@ void getSunriseSunsetHTTP(String results[]) {
   Serial.println("disconnecting.");
   http.stop();
 }
-
+*/
 /**
  * Setup method
  */
@@ -173,7 +175,7 @@ void getSunriseSunsetHTTP(String results[]) {
   Serial.print("My address is ");
   Serial.println(Ethernet.localIP());
 }*/
-
+/*
 void sunrise_sunset_loop()
 {
   // this array will hold the requested sunrise/sunset times.
@@ -211,5 +213,6 @@ void sunrise_sunset_loop()
   Serial.print("sunset hour: "), Serial.println(sunsetHour);
   Serial.print("sunset min: "), Serial.println(sunsetMinute);
 
-  haveSStime = 1;
+  int haveSStime = 1;
 }
+*/

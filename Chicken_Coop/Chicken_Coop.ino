@@ -3,18 +3,17 @@
 //**** Author: J. Hogue ****//
 
 #include <SPI.h>
-#include <SD.h>
-// OneWire library from http://www.pjrc.com/teensy/td_libs_OneWire.html , http://playground.arduino.cc/Learning/OneWire
 #include <OneWire.h>
-// DualVNH5019MotorShield library from https://github.com/pololu/dual-vnh5019-motor-shield
 #include "DualVNH5019MotorShield.h"
-// ethernet library from https://github.com/Seeed-Studio/Ethernet_Shield_W5200
+#include "Bridge.h"
 #include <EthernetV2_0.h>
-// httpclient library from https://github.com/amcewen/HttpClient
 #include <HttpClient.h>
-// ArduinoJson library from https://github.com/bblanchon/ArduinoJson
-#include <ArduinoJson.h>
+#include <BridgeServer.h>
+#include <BridgeClient.h>
+#include <SD.h>
 
+
+#define ServerDEBUG
 #define DOOR_MOVING 0
 #define DOOR_OPEN 1
 #define DOOR_CLOSED 2
@@ -26,7 +25,7 @@
 // Pin 1 = Serial Comms TX0
 //const int Mtr_1_Dir_In_A_Pin = 2; // Motor 1 Direction Input A Pin
 //const int Mtr_1_Dir_In_B_Pin = 3; // Motor 1 Direction Input B Pin
-//const int SDchipSelect = 4; // SD Card Pin
+const int SDchipSelect = 4; // SD Card Pin
 OneWire  ds(5);  // on pin 5 (a 4.7K resistor is necessary)-Coop Inside Temperature Sensor Input Pin
 //const int Mtr_1_Enable_Diag_Pin = 6; // Motor 1 Enable & Diagnostic Pin
 //const int Mtr_2_Dir_In_A_Pin = 7; // Motor 2 Direction Input A Pin
@@ -59,7 +58,7 @@ const int rtcs = 49; // Real Time Chip Pin
 
 //*****************************************************************************************************//
 //  FOR DEBUG ONLY  MAKE SURE TO COMMENT OUT FOR ACTUAL APPLICATION   //
-//const int temperaturePin = 3; // Analog Pin
+const int temperaturePin = 3; // Analog Pin
 
 //*****************************************************************************************************//
 
@@ -97,19 +96,17 @@ int CloseDoorHour = 20, CloseDoorMin = 0;
 int OpenDoorHour = 7, OpenDoorMin = 0;
 //int CloseDoorHour = 14, CloseDoorMin = 32;  //debug
 //int OpenDoorHour = 14, OpenDoorMin = 36;  //debug
-//int Sunrise;
-int DaylightOnHour = 4; // Used for manual function of daylight light
-int DaylightOffHour = 7; // Used for manual function of daylight light
-int DaylightOnMonth = 10; // Used for manual function of daylight light
-int DaylightOffMonth = 3; // Used for manual function of daylight light
-int UpdateTime = 16; // Variable used to Update time via NTP server and apply updated time to RTC
-boolean haveSStime; // Variable used for updating sunrise/sunset time, and current time via NTP only once per day
-int timeHour; // CST variable for Hour
-int timeMinute; // CST variable for Minute
-int timeSecond; // CST variable for Second
-
+boolean isInitialized = false;
 
 DualVNH5019MotorShield md;
+//EthernetServer server(80);
+BridgeServer server;
+
+// Initialize the Ethernet client library
+// with the IP address and port of the server 
+// that you want to connect to (port 80 is default for HTTP):
+//EthernetClient client;
+//HttpClient http(client);
 
 void stopIfFault()
 {
@@ -122,58 +119,12 @@ void stopIfFault()
   }
 }
 
-/****************************************************************
-* Sunrise/Sunset Server definitions
-*****************************************************************/
-// Number of milliseconds to wait without receiving any data before we give up
-const int kNetworkTimeout = 30*1000;
-// Number of milliseconds to wait if no data is available before trying again
-const int kNetworkDelay = 1000;
-// Hour, Minute, Second of Sunrise CST
-int sunriseHour, sunriseMinute, sunriseSecond;
-// Hour, Minute, Second of Sunset CST
-int sunsetHour, sunsetMinute, sunsetSecond;
-
-// Enter a MAC address for your controller below.
-// Newer Ethernet shields have a MAC address printed on a sticker on the shield
-byte mac[] = {  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-//IPAddress ip(10,10,10,198); // local IP HogHouse
-//IPAddress ip(10,110,7,199); // local IP TDI
-IPAddress ip(192,168,0,199); // local ip JJ House
-
-// Initialize the Ethernet client library
-// with the IP address and port of the server 
-// that you want to connect to (port 80 is default for HTTP):
-EthernetClient client;
-HttpClient http(client);
-#define W5200_CS 10
-#define SDCARD_CS 4
-
-// parameters needed to fetch sunrise and sunset time RESTfully.
-const char sunriseSunsetServer[] = "api.sunrise-sunset.org";
-const char sunriseSunsetPath[] = "/json?lat=40.547554&lng=-89.614399&date=today";
-IPAddress sunriseSunsetIP(104,131,2,15);
-
-#define JSON_START_CHAR '{'
-
-// NTP Settings
-unsigned int localPort = 8888;       // local port to listen for UDP packets
-
-char timeServer[] = "time.nist.gov"; // time.nist.gov NTP server
-
-const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
-
-byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
-
-// A UDP instance to let us send and receive packets over UDP
-EthernetUDP Udp;
-
 void setup() {
 
   // Define digital pins as inputs/outputs:
   //pinMode(Mtr_1_Dir_In_A_Pin, INPUT);
   //pinMode(Mtr_1_Dir_In_B_Pin, INPUT);
-  //pinMode(SDchipSelect, OUTPUT);
+  pinMode(SDchipSelect, OUTPUT);
   //pinMode(Mtr_1_Enable_Diag_Pin, INPUT);
   //pinMode(Mtr_2_Dir_In_A_Pin, INPUT);
   //pinMode(Mtr_2_Dir_In_B_Pin, INPUT);
@@ -190,48 +141,38 @@ void setup() {
   pinMode(Exhaust_Fan_Pin, OUTPUT);
   pinMode(Outside_Light_Pin, OUTPUT);
   pinMode(Fault_LED_Pin, OUTPUT);
-  pinMode(31, OUTPUT);
   pinMode(rtcs, OUTPUT);
   //pinMode(EthchipSelect, OUTPUT);
-  
-  //md.init(); // Initialize Motor Driver
 
-   // Open serial communications and wait for port to open:
-  Serial.begin(115200);
-  // disable all SPI devices
-  pinMode(SDCARD_CS,OUTPUT);
-  digitalWrite(SDCARD_CS,HIGH);
-  pinMode(W5200_CS,OUTPUT);
-  digitalWrite(W5200_CS,HIGH);
+  Serial.begin (115200);
+  md.init(); // Initialize Motor Driver
+  Bridge.begin();
 
-  digitalWrite(SDCARD_CS,LOW);
-  Serial.println("Starting SD...");
-  if(!SD.begin(SDCARD_CS)) {
-    Serial.println("failed.");
-  } else {
-    Serial.println("ok.");
+  #ifdef ServerDEBUG
+    Serial.print(F("Starting SD.."));
+  #endif
+
+  // disable w5100 SPI while setting up SD
+  pinMode(10, OUTPUT);                       // set the SS pin as an output (necessary!)
+  digitalWrite(10, HIGH);                    // but turn off the W5100 chip!
+
+  if(!SD.begin(4)) {
+  #ifdef ServerDEBUG
+    Serial.println(F("failed"));
+  #endif
   }
-  // start the Ethernet connection:
-  Serial.println("Starting Ethernet...");
-  Ethernet.begin(mac, ip);
+  else {
+  #ifdef ServerDEBUG
+    Serial.println(F("ok"));
+  #endif
+  }
 
-  // give time for ethernet shield to initialize.
-  delay(1000);
-  Serial.println("ok.");
-  Serial.println("connecting...");
-
-  // Ethernet begin returns with its SPI enabled, so disable it.
-  digitalWrite(W5200_CS,HIGH);
-
-  Serial.print("My address is ");
-  Serial.println(Ethernet.localIP());
-  Udp.begin(localPort);
-
-  //sunrise_sunset_setup();
+  server.listenOnLocalhost();
+  server.begin();
 
   RTC_init();
   //day(1-31), month(1-12), year(0-99), hour(0-23), minute(0-59), second(0-59)
-  //SetTimeDate(2,11,15,12,17,00); //This only needs to be set when the clock is new or not reading the correct time
+  //SetTimeDate(12,9,15,14,19,50); //This only needs to be set when the clock is new or not reading the correct time
 }
 
 /****************************************************************
@@ -239,55 +180,185 @@ void setup() {
 *****************************************************************/
 
 void loop() {
-  // Check Sunrise/Sunset every morning at 2am
-  if ((TimeDate[2] == UpdateTime) && (haveSStime == 0)) {
-    sunrise_sunset_loop();
-    getNTPtime();
-  }
-  // Reset one-shot bit an hour after intial check so we don't keep checking the sunrise/sunset server continuously
-  if (TimeDate[2] == UpdateTime +1) {
-    haveSStime = 0;
+  if(!isInitialized) {
+    isInitialized = true;
+    coop_init();
   }
   
+  BridgeClient client = server.accept();
+
+  if (client) {
+    process(client);
+    client.stop();
+  }
+
+  // Check coop environment and adjust accordingly
+  // Ex: If temp is too low, turn on heaters, if temp is too high, turn on fans.
+  // Ex2: Open/Close door based on time of day.
+
+  delay(50); 
+}
+
+/************************************************************************************************************/
+
+void process(BridgeClient client) {
+  String command = client.readStringUntil('/');
+
+  if (command == "digital") {
+    digitalCommand(client);
+  }
+  if (command == "analog") {
+    analogCommand(client);
+  }
+  if (command == "mode") {
+    modeCommand(client);
+  }
+  if (command == "settings") {
+    settingsCommand(client);
+  }
+  
+}
+
+/**
+ * Method to handle on/off commands for digital pins.
+ * Pin will be the digital pin location on the arduino.
+ * Value will be the command, 0 for off/close, 1 for on/open.
+ */
+void digitalCommand(BridgeClient client) {
+  int pin, value;
+
+  pin = client.parseInt();
+
+  if (client.read() == '/') {
+    value = client.parseInt();
+    digitalWrite(pin, value);
+  } 
+  else {
+    value = digitalRead(pin);
+  }
+
+  client.print(F("Pin D"));
+  client.print(pin);
+  client.print(F(" set to: "));
+  client.println(value);
+
+  String key = "D";
+  key += pin;
+  Bridge.put(key, String(value));
+}
+
+/**
+ * Method to handle on/off commands for analog pins.
+ * Pin will be the analog pin location on the arduino.
+ * Value will be the command, 0 for off/close, 1 for on/open.
+ */
+void analogCommand(BridgeClient client) {
+  int pin, value;
+
+  pin = client.parseInt();
+
+  if (client.read() == '/') {
+    value = client.parseInt();
+    analogWrite(pin, value);
+
+    // Send feedback to client
+    client.print(F("Pin D"));
+    client.print(pin);
+    client.print(F(" set to analog "));
+    client.println(value);
+
+    String key = "D";
+    key += pin;
+    Bridge.put(key, String(value));
+  }
+  else {
+    value = analogRead(pin);
+
+    client.print(F("Pin A"));
+    client.print(pin);
+    client.print(F(" reads analog "));
+    client.println(value);
+
+    String key = "A";
+    key += pin;
+    Bridge.put(key, String(value));
+  }
+}
+
+/************************************************************************************************************/
+
+void modeCommand(BridgeClient client) {
+  int pin;
+
+  // Read pin number
+  pin = client.parseInt();
+
+  // If the next character is not a '/' we have a malformed URL
+  if (client.read() != '/') {
+    client.println(F("error"));
+    return;
+  }
+
+  String mode = client.readStringUntil('\r');
+
+  if (mode == "input") {
+    pinMode(pin, INPUT);
+    // Send feedback to client
+    client.print(F("Pin D"));
+    client.print(pin);
+    client.print(F(" configured as INPUT!"));
+    return;
+  }
+
+  if (mode == "output") {
+    pinMode(pin, OUTPUT);
+    // Send feedback to client
+    client.print(F("Pin D"));
+    client.print(pin);
+    client.print(F(" configured as OUTPUT!"));
+    return;
+  }
+
+  client.print(F("error: invalid mode "));
+  client.print(mode);
+}
+
+void settingsCommand(BridgeClient client) {
+  return;
+}
+
+void coop_init() {
   CheckFaults();
   if (delayMilliSeconds(0, 2500)) {
     ReadIO();
   }
 
   // Temperature Control
-  if (delayMilliSeconds(1, 5000)) {
-    CheckCoopTemp();  // Get Coop Temperature
-    //GetAnalogTemp(); debug at work only
-    //CheckCoopTemp(); // Get A 2nd Temperature
-    CoopTempControl();
-    //WaterTempControl(); // Not Installed
-    CheckAirQuality();  // Get Ammonia Reading and Control Exhaust Fan based on Ammonia Level or Coop Temperature
-    InsideLight();
+  CheckCoopTemp();  // Get Coop Temperature
+  //GetAnalogTemp(); debug at work only
+  //CheckCoopTemp(); // Get A 2nd Temperature
+  CoopTempControl();
+  //WaterTempControl(); // Not Installed
+  CheckAirQuality();  // Get Ammonia Reading and Control Exhaust Fan based on Ammonia Level or Coop Temperature
 
-    /**********************
-          * DEBUG
-    **********************/
-    //Serial.print("Door State:"), Serial.println(Door_State);
-    //Serial.print("upbutton:"), Serial.println(DoorUpOvrd);
-    //Serial.print("downbutton:"), Serial.println(DoorDownOvrd);
-    //Serial.print("Door Open:"), Serial.println(Door_Open);
-    //Serial.println(DoorUpSwitch);
-    //Serial.print("Door Closed: "), Serial.println(Door_Closed);
-    //Serial.println(DoorDownSwitch);
-    //Serial.print("Door 2nd Chance: "), Serial.println(Door_2nd_chance);
-    //Serial.print("Coop Temp: "), Serial.println(CoopTemp);
-    Serial.println(ReadTimeDate());
-    //Serial.println();
-    ReadTimeDate();  // Get Time/Date
+              /**********************
+                    * DEBUG
+              **********************/     
+  //Serial.print("Door State:"), Serial.println(Door_State);
+  //Serial.print("upbutton:"), Serial.println(DoorUpOvrd);
+  //Serial.print("downbutton:"), Serial.println(DoorDownOvrd);
+  //Serial.print("Door Open:"), Serial.println(Door_Open);
+  //Serial.println(DoorUpSwitch);
+  //Serial.print("Door Closed: "), Serial.println(Door_Closed);
+  //Serial.println(DoorDownSwitch);
+  //Serial.print("Door 2nd Chance: "), Serial.println(Door_2nd_chance);
+  //Serial.print("Coop Temp: "), Serial.println(CoopTemp);
+  ReadTimeDate();
+  Serial.println(ReadTimeDate());
+  Serial.println();
 
-    OutsideLight(); // Control Outside Porch Light
-  }
-
-  if ((TimeDate[5] >= DaylightOnMonth) && (TimeDate[5] <= DaylightOffMonth)) { // if the month is a winter month control "daylight" inside light
-    digitalWrite(31, HIGH);
-    //InsideLight();
-  }
-
+  OutsideLight();
+  
   if (TimeDate[2] == OpenDoorHour && TimeDate[1] == OpenDoorMin) {
     OpenCoopDoor();
   }
@@ -303,7 +374,7 @@ void loop() {
   if (DoorDownOvrd == 1) {
     OverrideDoorClose();
   }
-
+  
   /*if ((Door_State != 1) && (Door_2nd_chance == 1)) {
     SecondChanceDoorOpen();
   }
@@ -312,6 +383,9 @@ void loop() {
     SecondChanceDoorClose();
   }*/
 
+  if ((TimeDate[5] >= 10) && (TimeDate[5] <= 2)) { // if the month is a winter month
+    InsideLight();
+  }
 }
 
 /****************************************************************
@@ -473,14 +547,14 @@ String ReadTimeDate() {
 *****************************************************************/
 void ReadIO() {
   DoorUpOvrd = digitalRead(Door_Up_Ovrd_Pin);
-  DoorDownOvrd = digitalRead(Door_Down_Ovrd_Pin);
+  DoorDownOvrd =digitalRead(Door_Down_Ovrd_Pin);
   DoorUpSwitch = digitalRead(Door_Up_Switch_Pin);
   DoorDownSwitch = digitalRead(Door_Down_Switch_Pin);
   UpdateDoorState();
 
-  /**********************
-        * DEBUG
-  **********************/
+                /**********************
+                      * DEBUG
+                **********************/  
   //Serial.println("I/O Updated");
   //Serial.print("Door Up Switch:"), Serial.println(DoorUpSwitch);
   //Serial.print("Door Up Button:"), Serial.println(DoorUpOvrd);
@@ -500,7 +574,7 @@ void UpdateDoorState() {
       (Door_State = DOOR_MOVING);
     }
   }
-  // Door Completely Open
+    // Door Completely Open
   if ((DoorUpSwitch == 1) && (DoorDownSwitch == 0)) {
     if (delayMilliSeconds(3, 1000)) {
       (Door_State = DOOR_OPEN);
@@ -512,7 +586,7 @@ void UpdateDoorState() {
       (Door_State = DOOR_CLOSED);
     }
   }
-
+  
   switch (Door_State) {
     case 0:
       Serial.println("Door State: Door Has Not contacted either switch");
@@ -523,7 +597,7 @@ void UpdateDoorState() {
     case 2:
       Serial.println("Door State: Door is Closed");
       break;
-  }
+  }  
 }
 
 /****************************************************************
@@ -563,7 +637,7 @@ void OverrideDoorOpen () {
         //digitalWrite(Door_Open_Pin, HIGH); //Simulate Motor Output
         if (delayMilliSeconds(8, 750)) {
           ReadIO();   //Check Digital Signals and Update Variables
-        }
+        }  
       }
       md.setM1Speed(0);
       //digitalWrite(Door_Open_Pin, LOW); //Simulate Motor Output
@@ -630,7 +704,7 @@ void OverrideDoorClose () {
         //digitalWrite(Door_Close_Pin, HIGH); //Simulate Motor Output
         if (delayMilliSeconds(14, 750)) {
           ReadIO();   //Check Digital Signals and Update Variables
-        }
+        }  
       }
       md.setM1Speed(0);
       //digitalWrite(Door_Close_Pin, LOW); //Simulate Motor Output
@@ -645,7 +719,7 @@ void OverrideDoorClose () {
 void SecondChanceDoorClose() {
   Serial.println("Second Chance Door Close");
   // 2nd CHANCE DOOR CLOSE
-  if (delayMilliSeconds(15, 60000)) {
+  if (delayMilliSeconds(15,60000)) {
     while (Door_State != 2) {
       //CloseDoor();
       md.setM1Speed(400); // Turn on Motor
@@ -880,32 +954,27 @@ void CheckFaults () {
 
 void OutsideLight () {
 
-  if (Door_State == DOOR_CLOSED) {
-  //if ((Door_State == DOOR_CLOSED) || (TimeDate[2] >= CloseDoorHour && TimeDate[2] <= OpenDoorHour)) {
+  if ((Door_State == DOOR_CLOSED) || (TimeDate[2] >= CloseDoorHour && TimeDate[2] <= OpenDoorHour)) {
     digitalWrite(Outside_Light_Pin, HIGH);
-    Serial.println("Outside Light ON");
+    //Serial.println("Outside Light ON");
   }
-  if (Door_State == DOOR_OPEN) {
-  //if ((Door_State == DOOR_OPEN) || (TimeDate[2] >= OpenDoorHour && TimeDate[2] <= CloseDoorHour)) {
+  if ((Door_State == DOOR_OPEN) || (TimeDate[2] >= OpenDoorHour && TimeDate[2] <= CloseDoorHour)) {
     digitalWrite(Outside_Light_Pin, LOW);
-    Serial.println("Outside Light OFF");
+    //Serial.println("Outside Light OFF");
   }
 }
 
 /****************************************************************
-*Inside Light Control         provide 14 hours total daylight
+*Inside Light Control
 *****************************************************************/
 
-void InsideLight() {
+void InsideLight () {
 
-  if ((TimeDate[2] >= DaylightOnHour) && (TimeDate[2] <= DaylightOffHour)) { // turn light on if it is two hours before sunrise
+  if ((TimeDate[2] >= 18) && (TimeDate[2] <= 20)) { // if the hour is between 6 & 8pm turn light on
     digitalWrite(Inside_Light_Pin, HIGH);
-    Serial.println("Inside Light ON");
   }
   else {
     digitalWrite(Inside_Light_Pin, LOW);
-    Serial.println("Inside Light OFF");
-    //Serial.println(TimeDate[2]);
   }
 }
 
@@ -931,18 +1000,11 @@ void ExhFan () {
   }
 }
 
-/****************************************************************
-*Sunrise/Sunset Time Calculations
-*****************************************************************/
-
-//void Sun_RiseSet () {
-
-
-//}
 
 //*****************************************************************//
+//
 
-/*void GetAnalogTemp () {
+void GetAnalogTemp () {
 
   float voltage, degreesC;
   voltage = getVoltage(temperaturePin);
@@ -957,4 +1019,4 @@ float getVoltage(int pin)
   return (analogRead(pin) * 0.004882814); //converts counts to voltage
 }
 
-//*****************************************************************///*
+//*****************************************************************//
